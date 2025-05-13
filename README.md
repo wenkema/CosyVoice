@@ -75,6 +75,21 @@ sudo apt-get install sox libsox-dev
 # centos
 sudo yum install sox sox-devel
 ```
+- Support intel xpu by use pytorch ipex in conda env:
+
+``` sh
+python -m pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/xpu
+python -m pip install intel-extension-for-pytorch==2.7.10+xpu oneccl_bind_pt==2.7.0+xpu --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+```
+
+- Some envs to improve performance:
+
+``` sh
+export USE_XETLA=OFF
+export SYCL_CACHE_PERSISTENT=1
+# [optional] The following environment variable may improve performance, but in some cases, it may also lead to performance degradation
+export SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=0
+```
 
 **Model download**
 

@@ -14,6 +14,7 @@
 import os
 from typing import Generator
 import torch
+import intel_extension_for_pytorch as ipex
 import numpy as np
 import threading
 import time
@@ -30,12 +31,14 @@ class CosyVoiceModel:
                  llm: torch.nn.Module,
                  flow: torch.nn.Module,
                  hift: torch.nn.Module,
-                 fp16: bool = False):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                 fp16: bool = False,
+                 use_xpu: bool = False):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'xpu' if use_xpu else 'cpu')
         self.llm = llm
         self.flow = flow
         self.hift = hift
         self.fp16 = fp16
+        self.use_xpu = use_xpu
         if self.fp16 is True:
             self.llm.half()
             self.flow.half()
@@ -71,6 +74,10 @@ class CosyVoiceModel:
         hift_state_dict = {k.replace('generator.', ''): v for k, v in torch.load(hift_model, map_location=self.device).items()}
         self.hift.load_state_dict(hift_state_dict, strict=True)
         self.hift.to(self.device).eval()
+        if self.use_xpu is True:
+            self.llm = ipex.optimize(self.llm)
+            self.flow = ipex.optimize(self.flow)
+            self.hift = ipex.optimize(self.hift)
 
     def load_jit(self, llm_text_encoder_model, llm_llm_model, flow_encoder_model):
         llm_text_encoder = torch.jit.load(llm_text_encoder_model, map_location=self.device)
@@ -241,13 +248,15 @@ class CosyVoice2Model(CosyVoiceModel):
                  flow: torch.nn.Module,
                  hift: torch.nn.Module,
                  fp16: bool = False,
-                 use_flow_cache: bool = False):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                 use_flow_cache: bool = False,
+                 use_xpu: bool = False):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'xpu' if use_xpu else 'cpu')
         self.llm = llm
         self.flow = flow
         self.hift = hift
         self.fp16 = fp16
         self.use_flow_cache = use_flow_cache
+        self.use_xpu = use_xpu
         if self.fp16 is True:
             self.llm.half()
             self.flow.half()
@@ -320,6 +329,7 @@ class CosyVoice2Model(CosyVoiceModel):
             tts_mel = torch.concat([hift_cache_mel, tts_mel], dim=2)
         else:
             hift_cache_source = torch.zeros(1, 1, 0)
+            hift_cache_source = hift_cache_source.to(self.device)
         # keep overlap mel and hift cache
         if finalize is False:
             tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
