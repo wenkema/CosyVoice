@@ -44,10 +44,21 @@ class CosyVoiceFrontEnd:
                  campplus_model: str,
                  speech_tokenizer_model: str,
                  spk2info: str = '',
-                 allowed_special: str = 'all'):
+                 allowed_special: str = 'all',
+                 device: str = ''):
         self.tokenizer = get_tokenizer()
         self.feat_extractor = feat_extractor
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if device == '':
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'xpu' if torch.xpu.is_available() else 'cpu')
+        elif device == 'cuda':
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        elif device == 'xpu':
+            self.device = torch.device('xpu' if torch.xpu.is_available() else 'cpu')
+        elif device == 'cpu':
+            self.device = torch.device('cpu')
+        else:
+            logging.warning('device should be one of [cuda, xpu, cpu], but got {}, will fall back to cpu'.format(device))
+            self.device = torch.device('cpu')
         option = onnxruntime.SessionOptions()
         option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         option.intra_op_num_threads = 1
