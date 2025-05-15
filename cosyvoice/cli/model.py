@@ -119,6 +119,7 @@ class CosyVoiceModel:
                                                      embedding=llm_embedding.to(self.device)):
                     self.tts_speech_token_dict[uuid].append(i)
             else:
+                start_time = time.perf_counter()
                 for i in self.llm.inference(text=text.to(self.device),
                                             text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
                                             prompt_text=prompt_text.to(self.device),
@@ -127,6 +128,8 @@ class CosyVoiceModel:
                                             prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]], dtype=torch.int32).to(self.device),
                                             embedding=llm_embedding.to(self.device)):
                     self.tts_speech_token_dict[uuid].append(i)
+                end_time = time.perf_counter()
+                print('llm model inference time: {}s'.format(end_time - start_time))
         self.llm_end_dict[uuid] = True
 
     def vc_job(self, source_speech_token, uuid):
@@ -314,6 +317,7 @@ class CosyVoice2Model(CosyVoiceModel):
 
     def token2wav(self, token, prompt_token, prompt_feat, embedding, uuid, finalize=False, speed=1.0):
         with torch.cuda.amp.autocast(self.fp16):
+            start_time = time.perf_counter()
             tts_mel, self.flow_cache_dict[uuid] = self.flow.inference(token=token.to(self.device),
                                                                       token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
                                                                       prompt_token=prompt_token.to(self.device),
@@ -323,6 +327,8 @@ class CosyVoice2Model(CosyVoiceModel):
                                                                       embedding=embedding.to(self.device),
                                                                       cache=self.flow_cache_dict[uuid],
                                                                       finalize=finalize)
+            end_time = time.perf_counter()
+            print('flow model inference time: {}s'.format(end_time - start_time))
         # append hift cache
         if self.hift_cache_dict[uuid] is not None:
             hift_cache_mel, hift_cache_source = self.hift_cache_dict[uuid]['mel'], self.hift_cache_dict[uuid]['source']
@@ -343,7 +349,10 @@ class CosyVoice2Model(CosyVoiceModel):
             if speed != 1.0:
                 assert self.hift_cache_dict[uuid] is None, 'speed change only support non-stream inference mode'
                 tts_mel = F.interpolate(tts_mel, size=int(tts_mel.shape[2] / speed), mode='linear')
+            start_time = time.perf_counter()
             tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
+            end_time = time.perf_counter()
+            print('hift model inference time: {}s'.format(end_time - start_time))
             if self.hift_cache_dict[uuid] is not None:
                 tts_speech = fade_in_out(tts_speech, self.hift_cache_dict[uuid]['speech'], self.speech_window)
         return tts_speech
