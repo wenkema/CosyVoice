@@ -23,7 +23,7 @@ from contextlib import nullcontext
 import uuid
 from cosyvoice.utils.common import fade_in_out
 from cosyvoice.utils.file_utils import convert_onnx_to_trt
-
+from torch.profiler import profile, record_function, ProfilerActivity
 
 class CosyVoiceModel:
 
@@ -120,14 +120,17 @@ class CosyVoiceModel:
                     self.tts_speech_token_dict[uuid].append(i)
             else:
                 start_time = time.perf_counter()
-                for i in self.llm.inference(text=text.to(self.device),
-                                            text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
-                                            prompt_text=prompt_text.to(self.device),
-                                            prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(self.device),
-                                            prompt_speech_token=llm_prompt_speech_token.to(self.device),
-                                            prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]], dtype=torch.int32).to(self.device),
-                                            embedding=llm_embedding.to(self.device)):
-                    self.tts_speech_token_dict[uuid].append(i)
+                activities = [ProfilerActivity.CPU, ProfilerActivity.XPU]
+                with profile(activities=activities) as prof:
+                    for i in self.llm.inference(text=text.to(self.device),
+                                                text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
+                                                prompt_text=prompt_text.to(self.device),
+                                                prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(self.device),
+                                                prompt_speech_token=llm_prompt_speech_token.to(self.device),
+                                                prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]], dtype=torch.int32).to(self.device),
+                                                embedding=llm_embedding.to(self.device)):
+                        self.tts_speech_token_dict[uuid].append(i)
+                prof.export_chrome_trace("llm_trace.json")
                 end_time = time.perf_counter()
                 print('llm model inference time: {}s'.format(end_time - start_time))
         self.llm_end_dict[uuid] = True
@@ -318,15 +321,18 @@ class CosyVoice2Model(CosyVoiceModel):
     def token2wav(self, token, prompt_token, prompt_feat, embedding, uuid, finalize=False, speed=1.0):
         with torch.cuda.amp.autocast(self.fp16):
             start_time = time.perf_counter()
-            tts_mel, self.flow_cache_dict[uuid] = self.flow.inference(token=token.to(self.device),
-                                                                      token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
-                                                                      prompt_token=prompt_token.to(self.device),
-                                                                      prompt_token_len=torch.tensor([prompt_token.shape[1]], dtype=torch.int32).to(self.device),
-                                                                      prompt_feat=prompt_feat.to(self.device),
-                                                                      prompt_feat_len=torch.tensor([prompt_feat.shape[1]], dtype=torch.int32).to(self.device),
-                                                                      embedding=embedding.to(self.device),
-                                                                      cache=self.flow_cache_dict[uuid],
-                                                                      finalize=finalize)
+            activities = [ProfilerActivity.CPU, ProfilerActivity.XPU]
+            with profile(activities=activities) as prof:
+                tts_mel, self.flow_cache_dict[uuid] = self.flow.inference(token=token.to(self.device),
+                                                                        token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
+                                                                        prompt_token=prompt_token.to(self.device),
+                                                                        prompt_token_len=torch.tensor([prompt_token.shape[1]], dtype=torch.int32).to(self.device),
+                                                                        prompt_feat=prompt_feat.to(self.device),
+                                                                        prompt_feat_len=torch.tensor([prompt_feat.shape[1]], dtype=torch.int32).to(self.device),
+                                                                        embedding=embedding.to(self.device),
+                                                                        cache=self.flow_cache_dict[uuid],
+                                                                        finalize=finalize)
+            prof.export_chrome_trace("flow_trace.json")
             end_time = time.perf_counter()
             print('flow model inference time: {}s'.format(end_time - start_time))
         # append hift cache
@@ -350,7 +356,10 @@ class CosyVoice2Model(CosyVoiceModel):
                 assert self.hift_cache_dict[uuid] is None, 'speed change only support non-stream inference mode'
                 tts_mel = F.interpolate(tts_mel, size=int(tts_mel.shape[2] / speed), mode='linear')
             start_time = time.perf_counter()
-            tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
+            activities = [ProfilerActivity.CPU, ProfilerActivity.XPU]
+            with profile(activities=activities) as prof:
+                tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
+            prof.export_chrome_trace("hift_trace.json")
             end_time = time.perf_counter()
             print('hift model inference time: {}s'.format(end_time - start_time))
             if self.hift_cache_dict[uuid] is not None:
