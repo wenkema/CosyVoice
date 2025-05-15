@@ -22,6 +22,7 @@ from contextlib import nullcontext
 import uuid
 from cosyvoice.utils.common import fade_in_out
 from cosyvoice.utils.file_utils import convert_onnx_to_trt, logging
+from torch.profiler import profile, record_function, ProfilerActivity
 
 class CosyVoiceModel:
 
@@ -30,7 +31,8 @@ class CosyVoiceModel:
                  flow: torch.nn.Module,
                  hift: torch.nn.Module,
                  fp16: bool = False,
-                 device: str = ''):
+                 device: str = '',
+                 profile: bool = False):
         if device == '':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'xpu' if torch.xpu.is_available() else 'cpu')
         elif device == 'cuda':
@@ -46,6 +48,7 @@ class CosyVoiceModel:
         self.flow = flow
         self.hift = hift
         self.fp16 = fp16
+        self.profile = profile
         if self.fp16 is True:
             self.llm.half()
             self.flow.half()
@@ -123,14 +126,27 @@ class CosyVoiceModel:
                     self.tts_speech_token_dict[uuid].append(i)
             else:
                 start_time = time.perf_counter()
-                for i in self.llm.inference(text=text.to(self.device),
-                                            text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
-                                            prompt_text=prompt_text.to(self.device),
-                                            prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(self.device),
-                                            prompt_speech_token=llm_prompt_speech_token.to(self.device),
-                                            prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]], dtype=torch.int32).to(self.device),
-                                            embedding=llm_embedding.to(self.device)):
-                    self.tts_speech_token_dict[uuid].append(i)
+                if self.profile is True:
+                    activities = [ProfilerActivity.CPU, ProfilerActivity.XPU]
+                    with profile(activities=activities) as prof:
+                        for i in self.llm.inference(text=text.to(self.device),
+                                                    text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
+                                                    prompt_text=prompt_text.to(self.device),
+                                                    prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(self.device),
+                                                    prompt_speech_token=llm_prompt_speech_token.to(self.device),
+                                                    prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]], dtype=torch.int32).to(self.device),
+                                                    embedding=llm_embedding.to(self.device)):
+                            self.tts_speech_token_dict[uuid].append(i)
+                    prof.export_chrome_trace("llm_trace.json")
+                else:
+                    for i in self.llm.inference(text=text.to(self.device),
+                                                    text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
+                                                    prompt_text=prompt_text.to(self.device),
+                                                    prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(self.device),
+                                                    prompt_speech_token=llm_prompt_speech_token.to(self.device),
+                                                    prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]], dtype=torch.int32).to(self.device),
+                                                    embedding=llm_embedding.to(self.device)):
+                            self.tts_speech_token_dict[uuid].append(i)
                 torch.xpu.synchronize()
                 end_time = time.perf_counter()
                 logging.debug('llm model inference time: {}s'.format(end_time - start_time))
@@ -256,7 +272,8 @@ class CosyVoice2Model(CosyVoiceModel):
                  hift: torch.nn.Module,
                  fp16: bool = False,
                  use_flow_cache: bool = False,
-                 device: str = ''):
+                 device: str = '',
+                 profile: bool = False):
         if device == '':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'xpu' if torch.xpu.is_available() else 'cpu')
         elif device == 'cuda':
@@ -273,6 +290,7 @@ class CosyVoice2Model(CosyVoiceModel):
         self.flow = flow
         self.hift = hift
         self.fp16 = fp16
+        self.profile = profile
         self.use_flow_cache = use_flow_cache
         if self.fp16 is True:
             self.llm.half()
@@ -332,15 +350,29 @@ class CosyVoice2Model(CosyVoiceModel):
     def token2wav(self, token, prompt_token, prompt_feat, embedding, uuid, finalize=False, speed=1.0):
         with torch.autocast(device_type=str(self.device), enabled=self.fp16):
             start_time = time.perf_counter()
-            tts_mel, self.flow_cache_dict[uuid] = self.flow.inference(token=token.to(self.device),
-                                                                      token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
-                                                                      prompt_token=prompt_token.to(self.device),
-                                                                      prompt_token_len=torch.tensor([prompt_token.shape[1]], dtype=torch.int32).to(self.device),
-                                                                      prompt_feat=prompt_feat.to(self.device),
-                                                                      prompt_feat_len=torch.tensor([prompt_feat.shape[1]], dtype=torch.int32).to(self.device),
-                                                                      embedding=embedding.to(self.device),
-                                                                      cache=self.flow_cache_dict[uuid],
-                                                                      finalize=finalize)
+            if self.profile is True:
+                activities = [ProfilerActivity.CPU, ProfilerActivity.XPU]
+                with profile(activities=activities) as prof:
+                    tts_mel, self.flow_cache_dict[uuid] = self.flow.inference(token=token.to(self.device),
+                                                                            token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
+                                                                            prompt_token=prompt_token.to(self.device),
+                                                                            prompt_token_len=torch.tensor([prompt_token.shape[1]], dtype=torch.int32).to(self.device),
+                                                                            prompt_feat=prompt_feat.to(self.device),
+                                                                            prompt_feat_len=torch.tensor([prompt_feat.shape[1]], dtype=torch.int32).to(self.device),
+                                                                            embedding=embedding.to(self.device),
+                                                                            cache=self.flow_cache_dict[uuid],
+                                                                            finalize=finalize)
+                prof.export_chrome_trace("flow_trace.json")
+            else:
+                tts_mel, self.flow_cache_dict[uuid] = self.flow.inference(token=token.to(self.device),
+                                                                            token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
+                                                                            prompt_token=prompt_token.to(self.device),
+                                                                            prompt_token_len=torch.tensor([prompt_token.shape[1]], dtype=torch.int32).to(self.device),
+                                                                            prompt_feat=prompt_feat.to(self.device),
+                                                                            prompt_feat_len=torch.tensor([prompt_feat.shape[1]], dtype=torch.int32).to(self.device),
+                                                                            embedding=embedding.to(self.device),
+                                                                            cache=self.flow_cache_dict[uuid],
+                                                                            finalize=finalize)
             torch.xpu.synchronize()
             end_time = time.perf_counter()
             logging.debug('flow model inference time: {}s'.format(end_time - start_time))
@@ -365,7 +397,13 @@ class CosyVoice2Model(CosyVoiceModel):
                 assert self.hift_cache_dict[uuid] is None, 'speed change only support non-stream inference mode'
                 tts_mel = F.interpolate(tts_mel, size=int(tts_mel.shape[2] / speed), mode='linear')
             start_time = time.perf_counter()
-            tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
+            if self.profile is True:
+                activities = [ProfilerActivity.CPU, ProfilerActivity.XPU]
+                with profile(activities=activities) as prof:
+                    tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
+                prof.export_chrome_trace("hift_trace.json")
+            else:
+                tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
             torch.xpu.synchronize()
             end_time = time.perf_counter()
             logging.debug('hift model inference time: {}s'.format(end_time - start_time))

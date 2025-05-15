@@ -13,13 +13,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--device', choices=['xpu', 'cuda', 'cpu'], default='xpu', help='Set device (default: xpu)')
 parser.add_argument('-l', '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO', help='Set log level (default: INFO)')
 parser.add_argument('-m', '--model-path', type=str, default=os.path.join(WORK_DIR, 'pretrained_models/CosyVoice2-0.5B'), help='Path to the model directory (default: pretrained_models/CosyVoice2-0.5B)')
+parser.add_argument('-p', '--profile', action='store_true', help='Enable profiling (default: False)')
 args = parser.parse_args()
 
 user_device = args.device
 model_path = args.model_path
+is_profile = args.profile
 logging.getLogger().setLevel(args.loglevel)
 
-cosyvoice = CosyVoice2(model_path, load_jit=False, load_trt=False, fp16=False, use_flow_cache=False, device=user_device)
+cosyvoice = CosyVoice2(model_path, load_jit=False, load_trt=False, fp16=False, use_flow_cache=False, device=user_device, profile=is_profile)
 
 # NOTE if you want to reproduce the results on https://funaudiollm.github.io/cosyvoice2, please add text_frontend=False during inference
 # zero_shot usage
