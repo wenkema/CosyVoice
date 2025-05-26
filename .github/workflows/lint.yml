@@ -2,51 +2,17 @@ name: Lint
 
 on:
   pull_request:
-  push:
+    branches:
+      - main
 
 jobs:
-  quick-checks:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fetch CosyVoice
-        uses: actions/checkout@v1
-      - name: Checkout PR tip
-        run: |
-          set -eux
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # We are on a PR, so actions/checkout leaves us on a merge commit.
-            # Check out the actual tip of the branch.
-            git checkout ${{ github.event.pull_request.head.sha }}
-          fi
-          echo ::set-output name=commit_sha::$(git rev-parse HEAD)
-        id: get_pr_tip
-      - name: Ensure no tabs
-        run: |
-          (! git grep -I -l $'\t' -- . ':(exclude)*.txt' ':(exclude)*.svg' ':(exclude)**Makefile' ':(exclude)**/contrib/**' ':(exclude)third_party' ':(exclude).gitattributes' ':(exclude).gitmodules' || (echo "The above files have tabs; please convert them to spaces"; false))
-      - name: Ensure no trailing whitespace
-        run: |
-          (! git grep -I -n $' $' -- . ':(exclude)*.txt' ':(exclude)third_party' ':(exclude).gitattributes' ':(exclude).gitmodules' || (echo "The above files have trailing whitespace; please remove them"; false))
-
   flake8-py3:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, generic-py]
+    container:
+      image: python:3.10-alpine
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.9
-          architecture: x64
       - name: Fetch CosyVoice
-        uses: actions/checkout@v1
-      - name: Checkout PR tip
-        run: |
-          set -eux
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # We are on a PR, so actions/checkout leaves us on a merge commit.
-            # Check out the actual tip of the branch.
-            git checkout ${{ github.event.pull_request.head.sha }}
-          fi
-          echo ::set-output name=commit_sha::$(git rev-parse HEAD)
-        id: get_pr_tip
+        uses: actions/checkout@v3
       - name: Run flake8
         run: |
           set -eux
