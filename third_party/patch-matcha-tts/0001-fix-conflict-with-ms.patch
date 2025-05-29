@@ -1,0 +1,26 @@
+From 437b48dedb1bbb38190d427907fb7ca77cb21905 Mon Sep 17 00:00:00 2001
+From: luoxiaoc <xiaochuan.luo@intel.com>
+Date: Thu, 29 May 2025 09:12:55 +0800
+Subject: [PATCH] fix conflict with ms
+
+Signed-off-by: luoxiaoc <xiaochuan.luo@intel.com>
+---
+ matcha/utils/rich_utils.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/matcha/utils/rich_utils.py b/matcha/utils/rich_utils.py
+index f602f6e..39e7151 100644
+--- a/matcha/utils/rich_utils.py
++++ b/matcha/utils/rich_utils.py
+@@ -4,7 +4,7 @@ from typing import Sequence
+ import rich
+ import rich.syntax
+ import rich.tree
+-from hydra.core.hydra_config import HydraConfig
++#from hydra.core.hydra_config import HydraConfig
+ from lightning.pytorch.utilities import rank_zero_only
+ from omegaconf import DictConfig, OmegaConf, open_dict
+ from rich.prompt import Prompt
+-- 
+2.43.0
+

@@ -85,6 +85,7 @@ class CosyVoice:
             for model_output in self.model.tts(**model_input, stream=stream, speed=speed):
                 speech_len = model_output['tts_speech'].shape[1] / self.sample_rate
                 logging.info('yield speech len {}, rtf {}'.format(speech_len, (time.time() - start_time) / speech_len))
+                model_output["text"] = i
                 yield model_output
                 start_time = time.time()
 
