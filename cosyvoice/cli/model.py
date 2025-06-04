@@ -14,7 +14,6 @@
 import os
 from typing import Generator
 import torch
-import intel_extension_for_pytorch as ipex
 import numpy as np
 import threading
 import time
@@ -82,10 +81,6 @@ class CosyVoiceModel:
         hift_state_dict = {k.replace('generator.', ''): v for k, v in torch.load(hift_model, map_location=self.device).items()}
         self.hift.load_state_dict(hift_state_dict, strict=True)
         self.hift.to(self.device).eval()
-        if self.device == torch.device('xpu'):
-            self.llm = ipex.optimize(self.llm)
-            self.flow = ipex.optimize(self.flow)
-            self.hift = ipex.optimize(self.hift)
 
     def load_jit(self, llm_text_encoder_model, llm_llm_model, flow_encoder_model):
         llm_text_encoder = torch.jit.load(llm_text_encoder_model, map_location=self.device)
